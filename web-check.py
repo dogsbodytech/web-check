@@ -70,6 +70,9 @@ def run_checks():
         except requests.exceptions.ConnectionError:
             failed_connection(check, session)
             continue
+        except requests.exceptions.ReadTimeout:
+            failed_connection(check, session)
+            continue
 
         if url_content.status_code != 200:
             failed_connection(check, session)
@@ -101,6 +104,9 @@ def run_checks():
         except requests.exceptions.ConnectionError:
             failed_connection(check, session)
             continue
+        except requests.exceptions.ReadTimeout:
+            failed_connection(check, session)
+            continue
 
         if url_content.status_code != 200:
             failed_connection(check, session)
@@ -128,6 +134,9 @@ def run_checks():
         try:
             url_content = requests.get(check.url, timeout=check.check_timeout)
         except requests.exceptions.ConnectionError:
+            failed_connection(check, session)
+            continue
+        except requests.exceptions.ReadTimeout:
             failed_connection(check, session)
             continue
 
@@ -195,6 +204,8 @@ def add_md5(url, max_down_time, check_frequency, check_timeout):
         url_content = requests.get(url, timeout=check_timeout)
     except requests.exceptions.ConnectionError:
         return 'Error: Could not connect to chosen url {}'.format(url)
+    except requests.exceptions.ReadTimeout:
+        return 'Error: Connection timeout when connecting to {}'.format(url)
     except requests.exceptions.MissingSchema as e:
         return e
     except requests.exceptions.InvalidSchema as e:
@@ -234,6 +245,8 @@ def add_string(url, string, max_down_time, check_frequency, check_timeout):
         url_content = requests.get(url, timeout=check_timeout)
     except requests.exceptions.ConnectionError:
         return 'Error: Could not connect to chosen url {}'.format(url)
+    except requests.exceptions.ReadTimeout:
+        return 'Error: Connection timeout when connecting to {}'.format(url)
     except requests.exceptions.MissingSchema as e:
         return e
     except requests.exceptions.InvalidSchema as e:
@@ -281,6 +294,8 @@ def add_diff(url, max_down_time, check_frequency, check_timeout):
         url_content = requests.get(url, timeout=check_timeout)
     except requests.exceptions.ConnectionError:
         return 'Error: Could not connect to chosen url {}'.format(url)
+    except requests.exceptions.ReadTimeout:
+        return 'Error: Connection timeout when connecting to {}'.format(url)
     except requests.exceptions.MissingSchema as e:
         return e
     except requests.exceptions.InvalidSchema as e:
@@ -323,10 +338,8 @@ def get_longest_md5():
             longest_old_hash = len(str(check.old_hash))
         if len(str(check.failed_since)) > longest_failed_since:
             longest_failed_since = len(str(check.failed_since))
-        if len(str(check.max_down_time)) > \
-                                longest_max_down_time:
-            longest_max_down_time =\
-                                    len(str(check.max_down_time))
+        if len(str(check.max_down_time)) > longest_max_down_time:
+            longest_max_down_time = len(str(check.max_down_time))
         if len(str(check.run_after)) > longest_run_after:
             longest_run_after = len(str(check.run_after))
         if len(str(check.check_frequency)) > longest_check_frequency:
@@ -361,10 +374,8 @@ def get_longest_string():
             longest_present = len(str(check.present))
         if len(str(check.failed_since)) > longest_failed_since:
             longest_failed_since = len(str(check.failed_since))
-        if len(str(check.max_down_time)) > \
-                                longest_max_down_time:
-            longest_max_down_time =\
-                                    len(str(check.max_down_time))
+        if len(str(check.max_down_time)) > longest_max_down_time:
+            longest_max_down_time = len(str(check.max_down_time))
         if len(str(check.run_after)) > longest_run_after:
             longest_run_after = len(str(check.run_after))
         if len(str(check.check_frequency)) > longest_check_frequency:
@@ -395,16 +406,10 @@ def get_longest_diff():
     for check in session.query(DiffCheck).order_by(DiffCheck.id):
         if len(str(check.url)) > longest_url:
             longest_url = len(str(check.url))
-        # Not checking how long current_content is since it will be long and
-        # make the table look silly
-        #if len(str(check.current_content)) > longest_current_content:
-        #    longest_current_content = len(str(check.current_content))
         if len(str(check.failed_since)) > longest_failed_since:
             longest_failed_since = len(str(check.failed_since))
-        if len(str(check.max_down_time)) > \
-                                longest_max_down_time:
-            longest_max_down_time =\
-                                    len(str(check.max_down_time))
+        if len(str(check.max_down_time)) > longest_max_down_time:
+            longest_max_down_time = len(str(check.max_down_time))
         if len(str(check.run_after)) > longest_run_after:
             longest_run_after = len(str(check.run_after))
         if len(str(check.check_frequency)) > longest_check_frequency:
