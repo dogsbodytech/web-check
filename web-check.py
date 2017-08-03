@@ -193,6 +193,41 @@ def validate_input(max_down_time, check_frequency, check_timeout):
 
     return (max_down_time, check_frequency, check_timeout)
 
+def run_check(check_type):
+
+
+
+def add_check(check_type, data, max_down_time, check_frequency, check_timeout):
+    """
+    data will be eiter url or (url, string)
+    """
+    max_down_time, check_frequency, check_timeout = validate_input(
+        max_down_time, check_frequency, check_timeout)
+    try:
+        url_content = requests.get(url, timeout=check_timeout)
+    except requests.exceptions.ConnectionError:
+        return 'Error: Could not connect to chosen url {}'.format(url)
+    except requests.exceptions.ReadTimeout:
+        return 'Error: Connection timeout when connecting to {}'.format(url)
+    except requests.exceptions.MissingSchema as e:
+        return e
+    except requests.exceptions.InvalidSchema as e:
+        return e
+
+    if url_content.status_code != 200:
+        return 'Error: {} code from server'.format(url_content.status_code)
+
+    check_return = run_check(check_type)
+    check = check_type(url=url,
+                current_hash=current_hash,
+                failed_since=0,
+                max_down_time=max_down_time,
+                run_after=0,
+                check_frequency=check_frequency,
+                check_timeout=check_timeout)
+
+
+
 def add_md5(url, max_down_time, check_frequency, check_timeout):
     """
     Add a database entry for a url to monitor the md5 hash of.  Returns message
