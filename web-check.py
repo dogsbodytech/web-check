@@ -587,7 +587,7 @@ if __name__ == '__main__':
     default_max_down_time = 86400
     default_check_frequency = 3600
     default_check_timeout = 30
-    default_database_location = 'web_checks.db'
+    default_database_location = 'web_check.db'
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--check', action='store_true',
         help='Run checks against all monitored urls')
