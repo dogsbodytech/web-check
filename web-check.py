@@ -9,7 +9,7 @@ try:
     import difflib
     import sqlalchemy
     from sqlalchemy import Column, Integer, String, Table, MetaData
-    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.ext.declarative import declarative_base, declared_attr
     from sqlalchemy.orm import sessionmaker
 except ImportError:
     print("""Import failed make sure you have set up the virtual enviroment.
@@ -61,8 +61,8 @@ def check_if_recovered(check, session):
 
 def run_checks():
     """Perform hash, string and difference checks for all stored url's"""
-    for check in session.query(MD5Check).filter(MD5Check.run_after <
-                    time.time()).order_by(MD5Check.id):
+    for check in session.query(MD5Checks).filter(MD5Checks.run_after <
+                    time.time()).order_by(MD5Checks.id):
         check.run_after = time.time() + check.check_frequency
         session.commit()
         try:
@@ -95,8 +95,8 @@ def run_checks():
             check.current_hash = new_hash
             session.commit()
 
-    for check in session.query(StringCheck).filter(StringCheck.run_after <
-                    time.time()).order_by(StringCheck.id):
+    for check in session.query(StringChecks).filter(StringChecks.run_after <
+                    time.time()).order_by(StringChecks.id):
         check.run_after = time.time() + check.check_frequency
         session.commit()
         try:
@@ -127,8 +127,8 @@ def run_checks():
 
             session.commit()
 
-    for check in session.query(DiffCheck).filter(DiffCheck.run_after <
-                    time.time()).order_by(DiffCheck.id):
+    for check in session.query(DiffChecks).filter(DiffChecks.run_after <
+                    time.time()).order_by(DiffChecks.id):
         check.run_after = time.time() + check.check_frequency
         session.commit()
         try:
@@ -218,7 +218,7 @@ def add_md5(url, max_down_time, check_frequency, check_timeout):
         current_hash = get_md5(url_content.text)
     except:
         return 'Error: Failed to hash response from {}'.format(url)
-    check = MD5Check(url=url,
+    check = MD5Checks(url=url,
                 current_hash=current_hash,
                 failed_since=0,
                 max_down_time=max_down_time,
@@ -259,7 +259,7 @@ def add_string(url, string, max_down_time, check_frequency, check_timeout):
     if string in get_text(url_content.text):
         string_exists = 1
 
-    check = StringCheck(url=url,
+    check = StringChecks(url=url,
                     string_to_match=string,
                     present=string_exists,
                     failed_since=0,
@@ -304,7 +304,7 @@ def add_diff(url, max_down_time, check_frequency, check_timeout):
     if url_content.status_code != 200:
         return 'Error: {} code from server'.format(url_content.status_code)
 
-    check = DiffCheck(url=url,
+    check = DiffChecks(url=url,
                     current_content=get_text(url_content.text),
                     failed_since=0,
                     max_down_time=max_down_time,
@@ -329,7 +329,7 @@ def get_longest_md5():
     longest_run_after = 9
     longest_check_frequency = 15
     longest_check_timeout = 13
-    for check in session.query(MD5Check).order_by(MD5Check.id):
+    for check in session.query(MD5Checks).order_by(MD5Checks.id):
         if len(str(check.url)) > longest_url:
             longest_url = len(str(check.url))
         if len(str(check.current_hash)) > longest_current_hash:
@@ -365,7 +365,7 @@ def get_longest_string():
     longest_run_after = 9
     longest_check_frequency = 15
     longest_check_timeout = 13
-    for check in session.query(StringCheck).order_by(StringCheck.id):
+    for check in session.query(StringChecks).order_by(StringChecks.id):
         if len(str(check.url)) > longest_url:
             longest_url = len(str(check.url))
         if len(str(check.string_to_match)) > longest_string_to_match:
@@ -403,7 +403,7 @@ def get_longest_diff():
     longest_run_after = 9
     longest_check_frequency = 15
     longest_check_timeout = 13
-    for check in session.query(DiffCheck).order_by(DiffCheck.id):
+    for check in session.query(DiffChecks).order_by(DiffChecks.id):
         if len(str(check.url)) > longest_url:
             longest_url = len(str(check.url))
         if len(str(check.failed_since)) > longest_failed_since:
@@ -437,9 +437,9 @@ def list_checks():
         columns.append(column)
         arguments.append('row.{}'.format(column))
 
-    print('{} Checks:'.format('MD5Check'))
+    print('{} Checks:'.format('MD5Checks'))
     print(table_skel.format(*columns))
-    for check in session.query(MD5Check).order_by(MD5Check.id):
+    for check in session.query(MD5Checks).order_by(MD5Checks.id):
         print(table_skel.format(str(check.url),
                         str(check.current_hash),
                         str(check.old_hash),
@@ -457,9 +457,9 @@ def list_checks():
         columns.append(column)
         arguments.append('row.{}'.format(column))
 
-    print('{} Checks:'.format('StringCheck'))
+    print('{} Checks:'.format('StringChecks'))
     print(table_skel.format(*columns))
-    for check in session.query(StringCheck).order_by(StringCheck.id):
+    for check in session.query(StringChecks).order_by(StringChecks.id):
         print(table_skel.format(str(check.url),
                         str(check.string_to_match),
                         str(check.present),
@@ -477,9 +477,9 @@ def list_checks():
         columns.append(column)
         arguments.append('row.{}'.format(column))
 
-    print('{} Checks:'.format('DiffCheck'))
+    print('{} Checks:'.format('DiffChecks'))
     print(table_skel.format(*columns))
-    for check in session.query(DiffCheck).order_by(DiffCheck.id):
+    for check in session.query(DiffChecks).order_by(DiffChecks.id):
         print(table_skel.format(str(check.url),
                             str(check.current_content),
                             str(check.failed_since),
@@ -492,11 +492,11 @@ def list_checks():
 
 def delete_check(check_type, url):
     if check_type == 'md5':
-        check = session.query(MD5Check).filter(MD5Check.url == url)
+        check = session.query(MD5Checks).filter(MD5Checks.url == url)
     elif check_type == 'string':
-        check = session.query(StringCheck).filter(StringCheck.url == url)
+        check = session.query(StringChecks).filter(StringChecks.url == url)
     elif check_type == 'diff':
-        check = session.query(DiffCheck).filter(DiffCheck.url == url)
+        check = session.query(DiffChecks).filter(DiffChecks.url == url)
     else:
         return 'Chose either md5, string or diff check'
 
@@ -616,123 +616,46 @@ if __name__ == '__main__':
 
     engine = sqlalchemy.create_engine('sqlite:///{}'.format(
                                                     args.database_location))
+
     Base = declarative_base()
     metadata = MetaData()
 
-    class MD5Check(Base):
-        __tablename__ = 'md5s'
+    class BaseCheck(object):
+        @declared_attr
+        def __tablename__(cls):
+            return cls.__name__.lower()
+        __mapper_args__= {'always_refresh': True}
         id = Column(Integer, primary_key=True)
         url = Column(String, unique=True)
+        failed_since = Column(Integer)
+        max_down_time = Column(Integer)
+        run_after = Column(Integer)
+        check_frequency = Column(Integer)
+        check_timeout = Column(Integer)
+
+    class MD5Checks(Base, BaseCheck):
         current_hash = Column(String)
         old_hash = Column(String)
-        failed_since = Column(Integer)
-        max_down_time = Column(Integer)
-        run_after = Column(Integer)
-        check_frequency = Column(Integer)
-        check_timeout = Column(Integer)
-        def __repr__(self):
-            return '<url(url={}, current_hash={}, old_hash={},\
-failed_since={}, max_down_time={}, run_after={},\
-check_frequency={}, check_timeout{})>'.format(
-                        self.url,
-                        self.current_hash,
-                        self.old_hash,
-                        self.failed_since,
-                        self.max_down_time,
-                        self.run_after,
-                        self.check_frequency,
-                        self.check_timeout)
 
-    class StringCheck(Base):
-        __tablename__ = 'strings'
-        id = Column(Integer, primary_key=True)
-        url = Column(String)
+
+    class StringChecks(Base, BaseCheck):
         string_to_match = Column(String)
         present = Column(Integer)
-        failed_since = Column(Integer)
-        max_down_time = Column(Integer)
-        run_after = Column(Integer)
-        check_frequency = Column(Integer)
-        check_timeout = Column(Integer)
-        def __repr__(self):
-            return '<url(url={}, string_to_match={}, should_exist={},\
-failed_since={}, max_down_time={}, run_after={},\
-check_frequency={}, check_timeout{})>'.format(
-                        self.url,
-                        self.string_to_match,
-                        self.should_exist,
-                        self.failed_since,
-                        self.max_down_time,
-                        self.run_after,
-                        self.check_frequency,
-                        self.check_timeout)
 
-    class DiffCheck(Base):
-        __tablename__ = 'diffs'
-        id = Column(Integer, primary_key=True)
-        url = Column(String)
+    class DiffChecks(Base, BaseCheck):
         current_content = Column(String)
-        failed_since = Column(Integer)
-        max_down_time = Column(Integer)
-        run_after = Column(Integer)
-        check_frequency = Column(Integer)
-        check_timeout = Column(Integer)
-        def __repr__(self):
-            return '<url(url={}, current_content={}, failed_since=\
-{}, max_down_time={}, run_after={},\
-check_frequency={})>'.format(
-                            self.url,
-                            self.string_to_match,
-                            self.failed_since,
-                            self.max_down_time,
-                            self.run_after,
-                            self.check_frequency,
-                            self.check_timeout)
-
-    MD5Check.__table__
-    Table('md5s', metadata,
-            Column('id', Integer(), primary_key=True, nullable=False),
-            Column('url', String(), unique=True),
-            Column('current_hash', String()),
-            Column('old_hash', String()),
-            Column('failed_since', Integer()),
-            Column('max_down_time', Integer()),
-            Column('run_after', Integer()),
-            Column('check_frequency', Integer()),
-            Column('check_timeout', Integer()),   schema=None)
-
-    StringCheck.__table__
-    Table('strings', metadata,
-            Column('id', Integer(), primary_key=True, nullable=False),
-            Column('url', String(), unique=True),
-            Column('string_to_match', String()),
-            Column('present', Integer()),
-            Column('failed_since', Integer()),
-            Column('max_down_time', Integer()),
-            Column('run_after', Integer()),
-            Column('check_frequency', Integer()),
-            Column('check_timeout', Integer()),   schema=None)
-
-    DiffCheck.__table__
-    Table('diffs', metadata,
-            Column('id', Integer(), primary_key=True, nullable=False),
-            Column('url', String(), unique=True),
-            Column('current_content', String()),
-            Column('failed_since', Integer()),
-            Column('max_down_time', Integer()),
-            Column('run_after', Integer()),
-            Column('check_frequency', Integer()),
-            Column('check_timeout', Integer()),   schema=None)
 
     try:
-        metadata.create_all(engine)
+        Base.metadata.create_all(engine)
     except sqlalchemy.exc.OperationalError:
         print('Could not create or connect to database at {}'.format(
                                                     args.database_location))
         exit(1)
 
+# I don't think I should be creating the session here
     Session = sessionmaker(bind=engine)
     session = Session()
+
 
     if args.check:
         run_checks()
