@@ -193,32 +193,16 @@ def validate_input(max_down_time, check_frequency, check_timeout):
 
     return (max_down_time, check_frequency, check_timeout)
 
-def add_md5(url, max_down_time, check_frequency, check_timeout):
+def add_md5(url_content, max_down_time, check_frequency, check_timeout):
     """
     Add a database entry for a url to monitor the md5 hash of.  Returns message
     relating to success.
     """
-    max_down_time, check_frequency, check_timeout = validate_input(
-        max_down_time, check_frequency, check_timeout)
-    try:
-        url_content = requests.get(url, timeout=check_timeout)
-    except requests.exceptions.ConnectionError:
-        return 'Error: Could not connect to chosen url {}'.format(url)
-    except requests.exceptions.ReadTimeout:
-        return 'Error: Connection timeout when connecting to {}'.format(url)
-    except requests.exceptions.MissingSchema as e:
-        return e
-    except requests.exceptions.InvalidSchema as e:
-        return e
-
-    if url_content.status_code != 200:
-        return 'Error: {} code from server'.format(url_content.status_code)
-
     try:
         current_hash = get_md5(url_content.text)
     except:
         return 'Error: Failed to hash response from {}'.format(url)
-    check = MD5Checks(url=url,
+    check = check_type(url=url,
                 current_hash=current_hash,
                 failed_since=0,
                 max_down_time=max_down_time,
@@ -234,27 +218,12 @@ def add_md5(url, max_down_time, check_frequency, check_timeout):
     else:
         return 'Added MD5 Check for {}'.format(url)
 
-def add_string(url, string, max_down_time, check_frequency, check_timeout):
+def add_string(url_content, url, string, max_down_time, check_frequency,
+        check_timeout):
     """
     Add a database entry for a url to monitor for a string.  Returns message
     relating to success.
     """
-    max_down_time, check_frequency, check_timeout = validate_input(
-        max_down_time, check_frequency, check_timeout)
-    try:
-        url_content = requests.get(url, timeout=check_timeout)
-    except requests.exceptions.ConnectionError:
-        return 'Error: Could not connect to chosen url {}'.format(url)
-    except requests.exceptions.ReadTimeout:
-        return 'Error: Connection timeout when connecting to {}'.format(url)
-    except requests.exceptions.MissingSchema as e:
-        return e
-    except requests.exceptions.InvalidSchema as e:
-        return e
-
-    if url_content.status_code != 200:
-        return 'Error: {} code from server'.format(url_content.status_code)
-
     string_exists = 0
     if string in get_text(url_content.text):
         string_exists = 1
@@ -283,27 +252,11 @@ def add_string(url, string, max_down_time, check_frequency, check_timeout):
 
         return 'Added String Check for {}'.format(url)
 
-def add_diff(url, max_down_time, check_frequency, check_timeout):
+def add_diff(url_content, url, max_down_time, check_frequency, check_timeout):
     """
     Add a database entry for a url to monitor for any text changes.
     Returns message relating to success.
     """
-    max_down_time, check_frequency, check_timeout = validate_input(
-        max_down_time, check_frequency, check_timeout)
-    try:
-        url_content = requests.get(url, timeout=check_timeout)
-    except requests.exceptions.ConnectionError:
-        return 'Error: Could not connect to chosen url {}'.format(url)
-    except requests.exceptions.ReadTimeout:
-        return 'Error: Connection timeout when connecting to {}'.format(url)
-    except requests.exceptions.MissingSchema as e:
-        return e
-    except requests.exceptions.InvalidSchema as e:
-        return e
-
-    if url_content.status_code != 200:
-        return 'Error: {} code from server'.format(url_content.status_code)
-
     check = DiffChecks(url=url,
                     current_content=get_text(url_content.text),
                     failed_since=0,
@@ -319,6 +272,37 @@ def add_diff(url, max_down_time, check_frequency, check_timeout):
         return 'Error: An entry for {} is already in database'.format(url)
     else:
         return 'Added Diff Check for {}'.format(url)
+
+def add_check(check_type, url, max_down_time, check_frequency, check_timeout):
+    """
+    Get's the content for a given url and determines which check to add.
+    Returns  message relating to success.
+    """
+    try:
+        url_content = requests.get(url, timeout=check_timeout)
+    except requests.exceptions.ConnectionError:
+        return 'Error: Could not connect to chosen url {}'.format(url)
+    except requests.exceptions.ReadTimeout:
+        return 'Error: Connection timeout when connecting to {}'.format(url)
+    except requests.exceptions.MissingSchema as e:
+        return e
+    except requests.exceptions.InvalidSchema as e:
+        return e
+
+    if url_content.status_code != 200:
+        return 'Error: {} code from server'.format(url_content.status_code)
+
+    if check_type == MD5Checks:
+        return add_md5(url_content, url, max_down_time, check_frequency,
+                    check_timeout)
+    elif check_type == StringChecks:
+        return add_string(url_content, url, max_down_time, check_frequency,
+                    check_timeout)
+    elif check_type == DiffChecks:
+        return add_diff(url_content, url, max_down_time, check_frequency,
+                    check_timeout)
+    else:
+        return 'Unknown check type'
 
 def get_longest_md5():
     longest_url = 3
@@ -626,11 +610,12 @@ if __name__ == '__main__':
             return cls.__name__.lower()
         id = Column(Integer, primary_key=True)
         url = Column(String, unique=True)
-        failed_since = Column(Integer)
         max_down_time = Column(Integer)
-        run_after = Column(Integer)
         check_frequency = Column(Integer)
         check_timeout = Column(Integer)
+        run_after = Column(Integer)
+        alert_after = Column(Integer)
+
 
     class MD5Checks(Base, BaseCheck):
         current_hash = Column(String)
@@ -654,36 +639,35 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     session = Session()
 
-
     if args.check:
         run_checks()
     elif args.list:
         list_checks()
     elif args.add:
+        max_down_time, check_frequency, check_timeout = validate_input(
+                                                        args.max_down_time,
+                                                        args.check_frequency,
+                                                        args.check_timeout)
         if args.add[0] == 'md5':
             if len(args.add) != 2:
                 print('call as -a \'md5\' \'url-to-check\'')
                 exit(1)
-
-            print(add_md5(args.add[1], args.max_down_time, args.check_frequency,
-                        args.check_timeout))
+            check_type = MD5Checks
         elif args.add[0] == 'string':
             if len(args.add) != 3:
                 print('call as -a \'string\' string-to-check \'url-to-check\'')
                 exit(1)
-
-            print(add_string(args.add[2], args.add[1], args.max_down_time,
-                    args.check_frequency, args.check_timeout))
+            check_type = StringChecks
         elif args.add[0] == 'diff':
             if len(args.add) != 2:
                 print('call as -a \'diff\' \'url-to-check\'')
                 exit(1)
-
-            print(add_diff(args.add[1], args.max_down_time,
-                    args.check_frequency, args.check_timeout))
+            check_type = DiffChecks
         else:
             print('Choose either md5, string or diff.')
+            exit(1)
 
+        add_check(check_type, url, max_down_time, check_frequency, check_timeout)
     elif args.delete:
         if len(args.delete) != 2:
             print('call as -d \'check_type\' \'url-to-remove\'')
