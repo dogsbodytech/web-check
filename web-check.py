@@ -624,7 +624,6 @@ if __name__ == '__main__':
         @declared_attr
         def __tablename__(cls):
             return cls.__name__.lower()
-        __mapper_args__= {'always_refresh': True}
         id = Column(Integer, primary_key=True)
         url = Column(String, unique=True)
         failed_since = Column(Integer)
@@ -636,7 +635,6 @@ if __name__ == '__main__':
     class MD5Checks(Base, BaseCheck):
         current_hash = Column(String)
         old_hash = Column(String)
-
 
     class StringChecks(Base, BaseCheck):
         string_to_match = Column(String)
