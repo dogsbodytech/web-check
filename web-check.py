@@ -18,18 +18,35 @@ source venv/bin/activate
 pip install -r requirements.txt""")
     exit(1)
 
-functions = {
-        'run': {
-            MD5Checks: run_md5,
-            StringChecks: run_string,
-            DiffChecks: run_diff
-            },
-        'add':{
-            MD5Checks: run_md5,
-            StringChecks: run_string,
-            DiffChecks: run_diff
-            }
-        }
+
+Base = declarative_base()
+metadata = MetaData()
+
+class BaseCheck(object):
+    @declared_attr
+    def __tablename__(cls):
+        return cls.__name__.lower()
+    id = Column(Integer, primary_key=True)
+    url = Column(String, unique=True)
+    max_down_time = Column(Integer)
+    check_frequency = Column(Integer)
+    check_timeout = Column(Integer)
+    run_after = Column(Integer)
+    alert_after = Column(Integer)
+    alerted = Column(Integer)
+
+class MD5Checks(Base, BaseCheck):
+    current_hash = Column(String)
+    old_hash = Column(String)
+
+class StringChecks(Base, BaseCheck):
+    string_to_match = Column(String)
+    present = Column(Integer)
+
+class DiffChecks(Base, BaseCheck):
+    current_content = Column(String)
+
+checks = (MD5Checks, StringChecks, DiffChecks)
 
 def get_text(html):
     """
@@ -51,113 +68,112 @@ def get_md5(html):
     """
     return hashlib.md5(get_text(html).encode('utf-8')).hexdigest()
 
-def failed_connection(check, session):
-    current_time = time.time()
-    if not check.alert_after:
-        check.alert_after = current_time + check.max_down_time
-        session.commit()
-    if current_time - check.alert_after >= check.max_down_time:
-        print('Warning: Can\'t connect to {}'.format(check.url))
-
-    return ''
-
-def check_if_recovered(check, session):
+def check_if_recovered(check):
     if not check.alerted:
         return ''
-    check.alert_after = 0
     check.alerted = 0
     session.commit()
     print('Reastablished connection to {}'.format(check.url))
     return ''
 
-def check_failed():
-    error_message = 'Warning: Can\'t complete {} failed connection to {}'
+def check_failed(checks):
+    error_message = 'Error: {} failed connection to {}\n\
+Has now exceded the max down time, there will not be another warning until it \
+comes back up'
     errors = 0
-    for check_type in [MD5Checks, StringChecks, DiffChecks]:
-        for check in session.query(check_type).filter(check_type.alert_after <
-                    time.time()).order_by(check_type.id):
-            if not check.alerted:
-                print(error_message.format(check_type, check.url))
-                errors += 1
-                check.alerted = 1
-                session.commit()
+    for check_type in checks:
+        # There seem to be 3 ways to make the query I want through sqlalchemy
+        # http://docs.sqlalchemy.org/en/latest/orm/tutorial.html
+        # I've gone with filter multiple times since I like how it looks more
+        for check in session.query(check_type).filter(
+                check_type.alert_after != 0).filter(
+                check_type.alert_after < time.time()).filter(
+                check_type.alerted == 0).order_by(check_type.id):
+            print(error_message.format(check_type.__name__, check.url))
+            errors += 1
+            check.alerted = 1
+            session.commit()
 
     return errors
 
-def run_md5(check, url_content):
-    try:
+class Run:
+    def _md5(check, url_content):
         new_md5 = get_md5(url_content.text)
-    except:
-        print('Error: Failed to hash response from {}'.format(check.url))
-        continue
+        if new_md5 != check.current_hash:
+            if new_md5 == check.old_hash:
+                print('The md5 for {} has been reverted'.format(check.url))
+            else:
+                print('The md5 for {} has changed'.format(check.url))
 
-    if new_md5 != check.current_hash:
-        if new_md5 == check.old_hash:
-            print('The md5 for {} has been reverted'.format(check.url))
-        else:
-            print('The md5 for {} has changed'.format(check.url))
+            check.old_hash = check.current_hash
+            check.current_hash = new_md5
+            session.commit()
 
-        check.old_hash = check.current_hash
-        check.current_hash = new_md5
-        session.commit()
+        return ''
 
-    return ''
-
-def run_string(check, url_content):
-    string_found = check.string_to_match in get_text(url_content.text)
-    if string_found != check.present:
-        if check.present:
-            print('{} is no longer present on {}'.format(check.string_to_match,
+    def _string(check, url_content):
+        string_found = check.string_to_match in get_text(url_content.text)
+        if string_found != check.present:
+            if check.present:
+                print('{} is no longer present on {}'.format(check.string_to_match,
+                                                        check.url))
+                check.present = 0
+            else:
+                print('{} is now present on {}'.format(check.string_to_match,
                                                     check.url))
-            check.present = 0
-        else:
-            print('{} is now present on {}'.format(check.string_to_match,
-                                                check.url))
-            check.present = 1
+                check.present = 1
 
-        session.commit()
-
-    return ''
-
-def run_diff(check, url_content):
-    text = get_text(url_content.text)
-    if text != check.current_content:
-        for line in difflib.context_diff(check.current_content.split('\n'),
-                        text.split('\n'),
-                        fromfile='Old content for {}'.format(check.url),
-                        tofile='New content for {}'.format(check.url)):
-            print(line)
-        check.current_content = text
-        session.commit()
-
-    return ''
-
-def run_checks(checks):
-    for check_type in checks:
-        for check in session.query(check_type).filter(check_type.run_after <
-                    time.time()).order_by(check_type.id):
-            now = time.time()
-            check.run_after = now + check.check_frequency
-            check.alert_after = now + check.max_down_time
-            session.commit()
-            # Ignoring connection errors and will remove alert after once having
-            # completed successfully
-            try:
-                url_content = requests.get(check.url,
-                                    timeout=check.check_timeout)
-            except requests.exceptions.ConnectionError:
-                continue
-            except requests.exceptions.ReadTimeout:
-                continue
-
-            if url_content.status_code != 200:
-                continue
-
-            functions['run'][check_type](check, url_content)
-            check.alert_after = 0
             session.commit()
 
-    return ''
+        return ''
+
+    def _diff(check, url_content):
+        text = get_text(url_content.text)
+        if text != check.current_content:
+            for line in difflib.context_diff(check.current_content.split('\n'),
+                            text.split('\n'),
+                            fromfile='Old content for {}'.format(check.url),
+                            tofile='New content for {}'.format(check.url)):
+                print(line)
+            check.current_content = text
+            session.commit()
+
+        return ''
+
+    # mapping the class to the internal function used to run a check for that
+    # class
+    function = {
+                MD5Checks: _md5,
+                StringChecks: _string,
+                DiffChecks: _diff
+                }
+
+    def checks(checks):
+        for check_type in checks:
+            for check in session.query(check_type).filter(check_type.run_after <
+                        time.time()).order_by(check_type.id):
+                now = time.time()
+                check.run_after = now + check.check_frequency
+                check.alert_after = now + check.max_down_time
+                session.commit()
+                # Ignoring connection errors and will remove alert after once having
+                # completed successfully
+                try:
+                    url_content = requests.get(check.url,
+                                        timeout=check.check_timeout)
+                except requests.exceptions.ConnectionError:
+                    continue
+                except requests.exceptions.ReadTimeout:
+                    continue
+
+                if url_content.status_code != 200:
+                    continue
+
+                check_if_recovered(check)
+                Run.function[check_type](check, url_content)
+                session.commit()
+
+        return ''
 
 def validate_input(max_down_time, check_frequency, check_timeout):
     """
@@ -199,16 +215,21 @@ def get_content(url, check_timeout):
     try:
         url_content = requests.get(url, timeout=check_timeout)
     except requests.exceptions.ConnectionError:
-        return 'Error: Could not connect to chosen url {}'.format(url)
+        raise
+        #return 'Error: Could not connect to chosen url {}'.format(url)
     except requests.exceptions.ReadTimeout:
-        return 'Error: Connection timeout when connecting to {}'.format(url)
+        raise
+        #return 'Error: Connection timeout when connecting to {}'.format(url)
     except requests.exceptions.MissingSchema as e:
-        return e
+        raise
+        #return e
     except requests.exceptions.InvalidSchema as e:
-        return e
+        raise
+        #return e
 
     if url_content.status_code != 200:
-        return 'Error: {} code from server'.format(url_content.status_code)
+        raise
+        #return 'Error: {} code from server'.format(url_content.status_code)
 
     return url_content
 
@@ -226,6 +247,7 @@ def add_md5(url, max_down_time, check_frequency, check_timeout):
     check = MD5Checks(url=url,
                 current_hash=current_hash,
                 alert_after=0,
+                alerted=0,
                 max_down_time=max_down_time,
                 run_after=0,
                 check_frequency=check_frequency,
@@ -254,6 +276,7 @@ def add_string(url, string, max_down_time, check_frequency,
                     string_to_match=string,
                     present=string_exists,
                     alert_after=0,
+                    alerted=0,
                     max_down_time=max_down_time,
                     run_after= 0,
                     check_frequency=check_frequency,
@@ -283,6 +306,7 @@ def add_diff(url, max_down_time, check_frequency, check_timeout):
     check = DiffChecks(url=url,
                     current_content=get_text(url_content.text),
                     alert_after=0,
+                    alerted=0,
                     max_down_time=max_down_time,
                     run_after=0,
                     check_frequency=check_frequency,
@@ -409,7 +433,7 @@ def list_checks():
     print('use sqlite3 to view the tables')
     print('.tables')
     print('PRAGMA table_info(<table>);')
-    print('sqlite> select * from <table>;')
+    print('select * from <table>;')
     return ''
 
 def delete_check(check_type, url):
@@ -538,33 +562,6 @@ if __name__ == '__main__':
     engine = sqlalchemy.create_engine('sqlite:///{}'.format(
                                                     args.database_location))
 
-    Base = declarative_base()
-    metadata = MetaData()
-
-    class BaseCheck(object):
-        @declared_attr
-        def __tablename__(cls):
-            return cls.__name__.lower()
-        id = Column(Integer, primary_key=True)
-        url = Column(String, unique=True)
-        max_down_time = Column(Integer)
-        check_frequency = Column(Integer)
-        check_timeout = Column(Integer)
-        run_after = Column(Integer)
-        alert_after = Column(Integer)
-        alerted = Column(Integer)
-
-
-    class MD5Checks(Base, BaseCheck):
-        current_hash = Column(String)
-        old_hash = Column(String)
-
-    class StringChecks(Base, BaseCheck):
-        string_to_match = Column(String)
-        present = Column(Integer)
-
-    class DiffChecks(Base, BaseCheck):
-        current_content = Column(String)
 
     try:
         Base.metadata.create_all(engine)
@@ -578,13 +575,13 @@ if __name__ == '__main__':
     session = Session()
 
     if args.check:
-        run_checks()
-        errors = check_failed()
-    elif args.list:
-        list_checks()
-        errors = check_failed()
+        Run.checks(checks)
+        errors = check_failed(checks)
         if errors:
             exit(1)
+
+    elif args.list:
+        list_checks()
     elif args.add:
         max_down_time, check_frequency, check_timeout = validate_input(
                                                         args.max_down_time,
