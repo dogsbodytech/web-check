@@ -462,10 +462,8 @@ if __name__ == '__main__':
                                                     args.database_location))
         exit(1)
 
-    # I don't think I should be creating the session here
     Session = sessionmaker(bind=engine)
     session = Session()
-
     if args.check:
         Run.checks(checks)
         errors = check_failed(checks)
