@@ -18,7 +18,6 @@ source venv/bin/activate
 pip install -r requirements.txt""")
     exit(1)
 
-
 Base = declarative_base()
 metadata = MetaData()
 
@@ -68,18 +67,10 @@ def get_md5(html):
     """
     return hashlib.md5(get_text(html).encode('utf-8')).hexdigest()
 
-def check_if_recovered(check):
-    if not check.alerted:
-        return ''
-    check.alerted = 0
-    session.commit()
-    print('Reastablished connection to {}'.format(check.url))
-    return ''
-
 def check_failed(checks):
     error_message = 'Error: {} failed connection to {}\n\
-Has now exceded the max down time, there will not be another warning until it \
-comes back up'
+has now exceded the max down time, there will not be another warning until it \
+comes back up.'
     errors = 0
     for check_type in checks:
         # There seem to be 3 ways to make the query I want through sqlalchemy
@@ -169,8 +160,14 @@ class Run:
                 if url_content.status_code != 200:
                     continue
 
-                check_if_recovered(check)
+                if check.alerted:
+                    check.alerted = 0
+                    session.commit()
+                    print('Reastablished {} connection to {}'.format(
+                                            check_type.__name__, check.url))
+
                 Run.function[check_type](check, url_content)
+                check.alert_after = 0
                 session.commit()
 
         return ''
@@ -319,111 +316,6 @@ def add_diff(url, max_down_time, check_frequency, check_timeout):
         return 'Error: An entry for {} is already in database'.format(url)
     else:
         return 'Added Diff Check for {}'.format(url)
-
-def get_longest_md5():
-    longest_url = 3
-    longest_current_hash = 12
-    longest_old_hash = 8
-    longest_alert_after = 12
-    longest_max_down_time = 14
-    longest_run_after = 9
-    longest_check_frequency = 15
-    longest_check_timeout = 13
-    for check in session.query(MD5Checks).order_by(MD5Checks.id):
-        if len(str(check.url)) > longest_url:
-            longest_url = len(str(check.url))
-        if len(str(check.current_hash)) > longest_current_hash:
-            longest_current_hash = len(str(check.current_hash))
-        if len(str(check.old_hash)) > longest_old_hash:
-            longest_old_hash = len(str(check.old_hash))
-        if len(str(check.alert_after)) > longest_alert_after:
-            longest_alert_after = len(str(check.alert_after))
-        if len(str(check.max_down_time)) > longest_max_down_time:
-            longest_max_down_time = len(str(check.max_down_time))
-        if len(str(check.run_after)) > longest_run_after:
-            longest_run_after = len(str(check.run_after))
-        if len(str(check.check_frequency)) > longest_check_frequency:
-            longest_check_frequency = len(str(check.check_frequency))
-        if len(str(check.check_timeout)) > longest_check_timeout:
-            longest_check_timeout = len(str(check.check_timeout))
-
-    return (('url', longest_url),
-        ('current_hash', longest_current_hash),
-        ('old_hash', longest_old_hash),
-        ('alert_after', longest_alert_after),
-        ('max_down_time', longest_max_down_time),
-        ('run_after', longest_run_after),
-        ('check_frequency', longest_check_frequency),
-        ('check_timeout', longest_check_timeout))
-
-def get_longest_string():
-    longest_url = 3
-    longest_string_to_match = 15
-    longest_present = 7
-    longest_alert_after = 12
-    longest_max_down_time = 14
-    longest_run_after = 9
-    longest_check_frequency = 15
-    longest_check_timeout = 13
-    for check in session.query(StringChecks).order_by(StringChecks.id):
-        if len(str(check.url)) > longest_url:
-            longest_url = len(str(check.url))
-        if len(str(check.string_to_match)) > longest_string_to_match:
-            longest_string_to_match = len(str(check.string_to_match))
-        if len(str(check.present)) > longest_present:
-            longest_present = len(str(check.present))
-        if len(str(check.alert_after)) > longest_alert_after:
-            longest_alert_after = len(str(check.alert_after))
-        if len(str(check.max_down_time)) > longest_max_down_time:
-            longest_max_down_time = len(str(check.max_down_time))
-        if len(str(check.run_after)) > longest_run_after:
-            longest_run_after = len(str(check.run_after))
-        if len(str(check.check_frequency)) > longest_check_frequency:
-            longest_check_frequency = len(str(check.check_frequency))
-        if len(str(check.check_timeout)) > longest_check_timeout:
-            longest_check_timeout = len(str(check.check_timeout))
-
-    return (('url', longest_url),
-        ('string_to_match', longest_string_to_match),
-        ('present', longest_present),
-        ('alert_after', longest_alert_after),
-        ('max_down_time', longest_max_down_time),
-        ('run_after', longest_run_after),
-        ('check_frequency', longest_check_frequency),
-        ('check_timeout', longest_check_timeout))
-
-def get_longest_diff():
-    """
-    Called by list_checks to check how much to pad the tables.
-    """
-    longest_url = 3
-    longest_current_content = 15
-    longest_alert_after = 12
-    longest_max_down_time = 14
-    longest_run_after = 9
-    longest_check_frequency = 15
-    longest_check_timeout = 13
-    for check in session.query(DiffChecks).order_by(DiffChecks.id):
-        if len(str(check.url)) > longest_url:
-            longest_url = len(str(check.url))
-        if len(str(check.alert_after)) > longest_alert_after:
-            longest_alert_after = len(str(check.alert_after))
-        if len(str(check.max_down_time)) > longest_max_down_time:
-            longest_max_down_time = len(str(check.max_down_time))
-        if len(str(check.run_after)) > longest_run_after:
-            longest_run_after = len(str(check.run_after))
-        if len(str(check.check_frequency)) > longest_check_frequency:
-            longest_check_frequency = len(str(check.check_frequency))
-        if len(str(check.check_timeout)) > longest_check_timeout:
-            longest_check_timeout = len(str(check.check_timeout))
-
-    return (('url', longest_url),
-        ('current_content', longest_current_content),
-        ('alert_after', longest_alert_after),
-        ('max_down_time', longest_max_down_time),
-        ('run_after', longest_run_after),
-        ('check_frequency', longest_check_frequency),
-        ('check_timeout', longest_check_timeout))
 
 def list_checks():
     """
@@ -634,7 +526,7 @@ Arguments:
   \t\t\t\t-d [check_type] [url]
   --max-down-time\t\tNumber of seconds a site can be down for before warning
   --check-frequency\tNumber of seconds to wait between checks
-  --check-timeout\t\tNumber of seconds to check_timeout after
+  --check-timeout\t\tNumber of seconds to timeout get requests after
   --database-location\tSpecify a database name and location
   --import-file\t\tSpecify a file to populate the database from\
   """)
