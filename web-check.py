@@ -18,6 +18,19 @@ source venv/bin/activate
 pip install -r requirements.txt""")
     exit(1)
 
+functions = {
+        'run': {
+            MD5Checks: run_md5,
+            StringChecks: run_string,
+            DiffChecks: run_diff
+            },
+        'add':{
+            MD5Checks: run_md5,
+            StringChecks: run_string,
+            DiffChecks: run_diff
+            }
+        }
+
 def get_text(html):
     """
     Input html bytes.  Returns utf-8 markdown without links
@@ -71,101 +84,77 @@ def check_failed():
 
     return errors
 
+def run_md5(check, url_content):
+    try:
+        new_md5 = get_md5(url_content.text)
+    except:
+        print('Error: Failed to hash response from {}'.format(check.url))
+        continue
 
-def run_checks():
-    """Perform hash, string and difference checks for all stored url's"""
-    for check in session.query(MD5Checks).filter(MD5Checks.run_after <
-                    time.time()).order_by(MD5Checks.id):
-        check.run_after = time.time() + check.check_frequency
+    if new_md5 != check.current_hash:
+        if new_md5 == check.old_hash:
+            print('The md5 for {} has been reverted'.format(check.url))
+        else:
+            print('The md5 for {} has changed'.format(check.url))
+
+        check.old_hash = check.current_hash
+        check.current_hash = new_md5
         session.commit()
-        try:
-            url_content = requests.get(check.url, timeout=check.check_timeout)
-        except requests.exceptions.ConnectionError:
-            failed_connection(check, session)
-            continue
-        except requests.exceptions.ReadTimeout:
-            failed_connection(check, session)
-            continue
 
-        if url_content.status_code != 200:
-            failed_connection(check, session)
-            continue
+    return ''
 
-        check_if_recovered(check, session)
-        try:
-            new_hash = get_md5(url_content.text)
-        except:
-            print('Error: Failed to hash response from {}'.format(check.url))
-            continue
-
-        if new_hash != check.current_hash:
-            if new_hash == check.old_hash:
-                print('The md5 for {} has been reverted'.format(check.url))
-            else:
-                print('The md5 for {} has changed'.format(check.url))
-
-            check.old_hash = check.current_hash
-            check.current_hash = new_hash
-            session.commit()
-
-    for check in session.query(StringChecks).filter(StringChecks.run_after <
-                    time.time()).order_by(StringChecks.id):
-        check.run_after = time.time() + check.check_frequency
-        session.commit()
-        try:
-            url_content = requests.get(check.url, timeout=check.check_timeout)
-        except requests.exceptions.ConnectionError:
-            failed_connection(check, session)
-            continue
-        except requests.exceptions.ReadTimeout:
-            failed_connection(check, session)
-            continue
-
-        if url_content.status_code != 200:
-            failed_connection(check, session)
-            continue
-
-        check_if_recovered(check, session)
-        string_found = check.string_to_match in get_text(url_content.text)
-        if string_found != check.present:
-            if check.present:
-                print('{} is no longer present on {}'.format(
-                                                        check.string_to_match,
-                                                        check.url))
-                check.present = 0
-            else:
-                print('{} is now present on {}'.format(check.string_to_match,
+def run_string(check, url_content):
+    string_found = check.string_to_match in get_text(url_content.text)
+    if string_found != check.present:
+        if check.present:
+            print('{} is no longer present on {}'.format(check.string_to_match,
                                                     check.url))
-                check.present = 1
+            check.present = 0
+        else:
+            print('{} is now present on {}'.format(check.string_to_match,
+                                                check.url))
+            check.present = 1
 
-            session.commit()
-
-    for check in session.query(DiffChecks).filter(DiffChecks.run_after <
-                    time.time()).order_by(DiffChecks.id):
-        check.run_after = time.time() + check.check_frequency
         session.commit()
-        try:
-            url_content = requests.get(check.url, timeout=check.check_timeout)
-        except requests.exceptions.ConnectionError:
-            failed_connection(check, session)
-            continue
-        except requests.exceptions.ReadTimeout:
-            failed_connection(check, session)
-            continue
 
-        if url_content.status_code != 200:
-            failed_connection(check, session)
-            continue
+    return ''
 
-        check_if_recovered(check, session)
-        text = get_text(url_content.text)
-        if text != check.current_content:
-            for line in difflib.context_diff(check.current_content.split('\n'),
-                            text.split('\n'),
-                            fromfile='Old content for {}'.format(check.url),
-                            tofile='New content for {}'.format(check.url)):
-                print(line)
-            check.current_content = text
+def run_diff(check, url_content):
+    text = get_text(url_content.text)
+    if text != check.current_content:
+        for line in difflib.context_diff(check.current_content.split('\n'),
+                        text.split('\n'),
+                        fromfile='Old content for {}'.format(check.url),
+                        tofile='New content for {}'.format(check.url)):
+            print(line)
+        check.current_content = text
+        session.commit()
+
+    return ''
+
+def run_checks(checks):
+    for check_type in checks:
+        for check in session.query(check_type).filter(check_type.run_after <
+                    time.time()).order_by(check_type.id):
+            now = time.time()
+            check.run_after = now + check.check_frequency
+            check.alert_after = now + check.max_down_time
+            session.commit()
+            # Ignoring connection errors and will remove alert after once having
+            # completed successfully
+            try:
+                url_content = requests.get(check.url,
+                                    timeout=check.check_timeout)
+            except requests.exceptions.ConnectionError:
+                continue
+            except requests.exceptions.ReadTimeout:
+                continue
+
+            if url_content.status_code != 200:
+                continue
+
+            functions['run'][check_type](check, url_content)
+            check.alert_after = 0
             session.commit()
 
     return ''
@@ -416,65 +405,11 @@ def list_checks():
     """
     List all of the checks from the database in a table like format.
     """
-    table_skel = '|'
-    columns = []
-    arguments = []
-    for column, longest_entry in get_longest_md5():
-        table_skel += (' {{: <{}}} |'.format(longest_entry))
-        columns.append(column)
-        arguments.append('row.{}'.format(column))
-
-    print('{} Checks:'.format('MD5Checks'))
-    print(table_skel.format(*columns))
-    for check in session.query(MD5Checks).order_by(MD5Checks.id):
-        print(table_skel.format(str(check.url),
-                        str(check.current_hash),
-                        str(check.old_hash),
-                        str(check.alert_after),
-                        str(check.max_down_time),
-                        str(check.run_after),
-                        str(check.check_frequency),
-                        str(check.check_timeout)))
-
-    table_skel = '|'
-    columns = []
-    arguments = []
-    for column, longest_entry in get_longest_string():
-        table_skel += (' {{: <{}}} |'.format(longest_entry))
-        columns.append(column)
-        arguments.append('row.{}'.format(column))
-
-    print('{} Checks:'.format('StringChecks'))
-    print(table_skel.format(*columns))
-    for check in session.query(StringChecks).order_by(StringChecks.id):
-        print(table_skel.format(str(check.url),
-                        str(check.string_to_match),
-                        str(check.present),
-                        str(check.alert_after),
-                        str(check.max_down_time),
-                        str(check.run_after),
-                        str(check.check_frequency),
-                        str(check.check_timeout)))
-
-    table_skel = '|'
-    columns = []
-    arguments = []
-    for column, longest_entry in get_longest_diff():
-        table_skel += (' {{: <{}}} |'.format(longest_entry))
-        columns.append(column)
-        arguments.append('row.{}'.format(column))
-
-    print('{} Checks:'.format('DiffChecks'))
-    print(table_skel.format(*columns))
-    for check in session.query(DiffChecks).order_by(DiffChecks.id):
-        print(table_skel.format(str(check.url),
-                            str(check.current_content),
-                            str(check.alert_after),
-                            str(check.max_down_time),
-                            str(check.run_after),
-                            str(check.check_frequency),
-                            str(check.check_timeout)))
-
+    # I am removing the old list checks since it is horid
+    print('use sqlite3 to view the tables')
+    print('.tables')
+    print('PRAGMA table_info(<table>);')
+    print('sqlite> select * from <table>;')
     return ''
 
 def delete_check(check_type, url):
