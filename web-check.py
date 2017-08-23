@@ -82,6 +82,8 @@ comes back up.'
                 check_type.alert_after < time.time()).filter(
                 check_type.alerted == 0).order_by(check_type.id):
             print(error_message.format(check_type.__name__, check.url))
+            logging.warning(error_message.format(check_type.__name__,
+                                            check.url))
             errors += 1
             check.alerted = 1
             session.commit()
@@ -93,8 +95,10 @@ class Run:
         new_md5 = get_md5(url_content.text)
         if new_md5 != check.current_hash:
             if new_md5 == check.old_hash:
+                logging.info('MD5 reverted for {}'.format(check.url))
                 print('The md5 for {} has been reverted'.format(check.url))
             else:
+                logging.info('MD5 changed for {}'.format(check.url))
                 print('The md5 for {} has changed'.format(check.url))
 
             check.old_hash = check.current_hash
@@ -107,11 +111,19 @@ class Run:
         string_found = check.string_to_match in get_text(url_content.text)
         if string_found != check.present:
             if check.present:
-                print('{} is no longer present on {}'.format(check.string_to_match,
+                logging.info('{} is no longer present on {}'.format(
+                                                        check.string_to_match,
+                                                        check.url))
+                print('{} is no longer present on {}'.format(
+                                                        check.string_to_match,
                                                         check.url))
                 check.present = 0
             else:
-                print('{} is now present on {}'.format(check.string_to_match,
+                logging.info('{} is now present on {}'.format(
+                                                        check.string_to_match,
+                                                        check.url))
+                print('{} is now present on {}'.format(
+                                                    check.string_to_match,
                                                     check.url))
                 check.present = 1
 
@@ -122,6 +134,7 @@ class Run:
     def _diff(check, url_content):
         text = get_text(url_content.text)
         if text != check.current_content:
+            logging.info('Content changed for {}'.format(check.url))
             for line in difflib.context_diff(check.current_content.split('\n'),
                             text.split('\n'),
                             fromfile='Old content for {}'.format(check.url),
@@ -148,22 +161,32 @@ class Run:
                 check.run_after = now + check.check_frequency
                 check.alert_after = now + check.max_down_time
                 session.commit()
-                # Ignoring connection errors and will remove alert after once having
-                # completed successfully
                 try:
                     url_content = requests.get(check.url,
                                         timeout=check.check_timeout)
                 except requests.exceptions.ConnectionError:
+                    logging.info('Connection Error: when connecting to {}'
+                                                            .format(check.url))
                     continue
                 except requests.exceptions.ReadTimeout:
+                    logging.info('Timeout during connection to {}'.format(
+                                                                    check.url))
                     continue
 
-                if url_content.status_code != 200:
+                try:
+                    url_content.raise_for_status()
+                except requests.exceptions.HTTPError as e:
+                    logging.info(e)
                     continue
 
                 if check.alerted:
                     check.alerted = 0
                     session.commit()
+                    # This is information but the down is a warning and if I am
+                    # logging the down then I want to log the up or it will be
+                    # a pain to troubleshoot
+                    logging.warning('Reastablished {} connection to {}'.format(
+                                            check_type.__name__, check.url))
                     print('Reastablished {} connection to {}'.format(
                                             check_type.__name__, check.url))
 
@@ -209,35 +232,18 @@ def validate_input(max_down_time, check_frequency, check_timeout):
 
     return (max_down_time, check_frequency, check_timeout)
 
-def get_content(url, check_timeout):
-    try:
-        url_content = requests.get(url, timeout=check_timeout)
-    except requests.exceptions.ConnectionError:
-        raise
-        #return 'Error: Could not connect to chosen url {}'.format(url)
-    except requests.exceptions.ReadTimeout:
-        raise
-        #return 'Error: Connection timeout when connecting to {}'.format(url)
-    except requests.exceptions.MissingSchema as e:
-        raise
-        #return e
-    except requests.exceptions.InvalidSchema as e:
-        raise
-        #return e
-
-    if url_content.status_code != 200:
-        raise
-        #return 'Error: {} code from server'.format(url_content.status_code)
-
-    return url_content
-
-
 def add_md5(url, max_down_time, check_frequency, check_timeout):
     """
     Add a database entry for a url to monitor the md5 hash of.  Returns message
     relating to success.
     """
-    url_content = get_content(url, check_timeout)
+    url_content = requests.get(url, timeout=check_timeout)
+    url_content.raise_for_status()
+    if url_content.status_code != 200:
+        logging.info('{} error from {}'.format(
+                                        url_content.status_code,
+                                        check.url))
+
     try:
         current_hash = get_md5(url_content.text)
     except:
@@ -265,7 +271,8 @@ def add_string(url, string, max_down_time, check_frequency,
     Add a database entry for a url to monitor for a string.  Returns message
     relating to success.
     """
-    url_content = get_content(url, check_timeout)
+    url_content = requests.get(url, timeout=check_timeout)
+    url_content.raise_for_status()
     string_exists = 0
     if string in get_text(url_content.text):
         string_exists = 1
@@ -300,7 +307,8 @@ def add_diff(url, max_down_time, check_frequency, check_timeout):
     Add a database entry for a url to monitor for any text changes.
     Returns message relating to success.
     """
-    url_content = get_content(url, check_timeout)
+    url_content = requests.get(url, timeout=check_timeout)
+    url_content.raise_for_status()
     check = DiffChecks(url=url,
                     current_content=get_text(url_content.text),
                     alert_after=0,
@@ -349,6 +357,7 @@ def import_from_file(import_file):
     """
     Add's new database entrys from a file
     """
+    return 'This is broken'
     error_message = 'Import failed: {} is not formatted correctly'
     with open(import_file, 'r') as f:
         for line in f:
@@ -425,6 +434,7 @@ if __name__ == '__main__':
     default_max_down_time = 86400
     default_check_frequency = 3600
     default_check_timeout = 30
+    default_log_location = 'web_check.log'
     default_database_location = 'web_check.db'
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--check', action='store_true',
@@ -449,12 +459,16 @@ if __name__ == '__main__':
         help='Specify a database name and location')
     parser.add_argument('--import-file',
         help='Chose a file to populate the database from')
+    parser.add_argument('--log-location',
+        default=default_log_location,
+        help='Specify a log file name and location')
     parser.allow_abbrev = False
     args = parser.parse_args()
 
+    logging.basicConfig(filename=default_log_location, level=logging.WARNING,
+                format=('%(levelname)s:%(asctime)s %(message)s'))
     engine = sqlalchemy.create_engine('sqlite:///{}'.format(
                                                     args.database_location))
-
 
     try:
         Base.metadata.create_all(engine)
@@ -478,26 +492,67 @@ if __name__ == '__main__':
                                                         args.max_down_time,
                                                         args.check_frequency,
                                                         args.check_timeout)
-        if args.add[0] == 'md5':
-            if len(args.add) != 2:
-                print('call as -a \'md5\' \'url-to-check\'')
+        url = ''
+        check_specific_error_message = ''
+        try:
+            if args.add[0] == 'md5':
+                check_specific_error_message = 'Failed to add md5 check for'
+                if len(args.add) != 2:
+                    print('call as -a \'md5\' \'url-to-check\'')
+                    exit(1)
+                url = args.add[1]
+                print(add_md5(url, max_down_time, check_frequency,
+                                    check_timeout))
+
+            elif args.add[0] == 'string':
+                check_specific_error_message = 'Failed to add string check for'
+                if len(args.add) != 3:
+                    print('call as -a \'string\' string-to-check \'url-to-check\'')
+                    exit(1)
+                url = args.add[2]
+                string = args.add[1]
+                print(add_string(url, string, max_down_time,
+                            check_frequency, check_timeout))
+
+            elif args.add[0] == 'diff':
+                check_specific_error_message = 'Failed to add diff check for'
+                if len(args.add) != 2:
+                    print('call as -a \'diff\' \'url-to-check\'')
+                    exit(1)
+                url = args.add[1]
+                print(add_diff(url, max_down_time, check_frequency,
+                            check_timeout))
+
+            else:
+                print('Choose either md5, string or diff.')
                 exit(1)
-            print(add_md5(args.add[1], max_down_time, check_frequency,
-                        check_timeout))
-        elif args.add[0] == 'string':
-            if len(args.add) != 3:
-                print('call as -a \'string\' string-to-check \'url-to-check\'')
-                exit(1)
-            print(add_string(args.add[2], args.add[1], max_down_time,
-                        check_frequency, check_timeout))
-        elif args.add[0] == 'diff':
-            if len(args.add) != 2:
-                print('call as -a \'diff\' \'url-to-check\'')
-                exit(1)
-            print(add_diff(args.add[1], max_down_time, check_frequency,
-                        check_timeout))
-        else:
-            print('Choose either md5, string or diff.')
+
+        except requests.exceptions.ConnectionError:
+            logging.error('Connection Error: {} {}'.format(
+                                            check_specific_error_message, url))
+            print('Connection Error: {} {}'.format(check_specific_error_message,
+                                                url))
+            exit(1)
+        except requests.exceptions.ReadTimeout:
+            logging.error('Timeout Error: {} {}'.format(
+                                            check_specific_error_message, url))
+            print('Timeout Error: {} {}'.format(check_specific_error_message,
+                                            url))
+            exit(1)
+        except requests.exceptions.MissingSchema as e:
+            logging.error('{}: {} {}'.format(e, check_specific_error_message,
+                                            url))
+            print('{}: {} {}'.format(e, check_specific_error_message, url))
+            exit(1)
+        except requests.exceptions.InvalidSchema as e:
+            logging.error('{}: {} {}'.format(e, check_specific_error_message,
+                                            url))
+            print('{}: {} {}'.format(e, check_specific_error_message, url))
+            exit(1)
+        except requests.exceptions.HTTPError as e:
+            logging.error('{}: {} {}'.format(e, check_specific_error_message,
+                                            url))
+            print('{}: {} {}'.format(e, check_specific_error_message, url))
             exit(1)
 
     elif args.delete:
@@ -527,5 +582,6 @@ Arguments:
   --check-frequency\tNumber of seconds to wait between checks
   --check-timeout\t\tNumber of seconds to timeout get requests after
   --database-location\tSpecify a database name and location
-  --import-file\t\tSpecify a file to populate the database from\
+  --import-file\t\tSpecify a file to populate the database from
+  --log-location\tSpecify a log file name and location\
   """)
