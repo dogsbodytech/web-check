@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 try:
     import sys
+    import logging
     import argparse
     import time
     import requests
