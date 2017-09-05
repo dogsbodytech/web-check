@@ -44,6 +44,7 @@ class StringChecks(Base, BaseCheck):
     present = Column(Integer)
 
 class DiffChecks(Base, BaseCheck):
+    flags = Column(String)
     current_content = Column(String)
 
 checks = (MD5Checks, StringChecks, DiffChecks)
@@ -66,6 +67,9 @@ def get_text(html):
     h = html2text.HTML2Text()
     h.ignore_links = True
     return h.handle(html)
+
+def strip_numbers(text):
+    return(filter(lambda x: not x.isdigit(), text))
 
 def get_md5(html):
     """
@@ -138,6 +142,10 @@ class Run:
 
     def _diff(session, check, url_content):
         text = get_text(url_content.text)
+        if session.flags == 'strip-numbers':
+            print(session.url)
+            current_content = strip_numbers(current_content)
+
         if text != check.current_content:
             logging.info('Content changed for {}'.format(check.url))
             for line in difflib.context_diff(check.current_content.split('\n'),
@@ -340,6 +348,10 @@ class Add:
                 print('Added String Check for {}'.format(url))
 
         elif check_type == 'diff':
+            current_content = get_text(url_content.text)
+            if string == 'strip-numbers':
+                current_content = strip_numbers(current_content)
+
             check = DiffChecks(url=url,
                             current_content=get_text(url_content.text),
                             alert_after=0,
@@ -347,7 +359,8 @@ class Add:
                             max_down_time=max_down_time,
                             run_after=0,
                             check_frequency=check_frequency,
-                            check_timeout=check_timeout)
+                            check_timeout=check_timeout,
+                            flags=string)
             session.add(check)
             try:
                 session.commit()
