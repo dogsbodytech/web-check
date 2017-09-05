@@ -239,8 +239,8 @@ class Add:
         return (max_down_time, check_frequency, check_timeout)
 
     def check(session,
-            url,
             check_type,
+            url,
             max_down_time,
             check_frequency,
             check_timeout,
@@ -381,12 +381,13 @@ class Add:
                     continue
 
                 try:
-                    Add.check(*line.split('|'))
+                    Add.check(session, *line.split('|'))
                 except TypeError:
                     logging.warning('Warning: line {} was skipped, it is not '
                         'in an accepted format'.format(line_number))
                     print('Warning: line {} was skipped, it is not in an '\
                         'accepted format'.format(line_number))
+                    raise
                 except:
                     logging.error('Error: line {} was skipped due to an error'
                                                     .format(line_number))
@@ -489,8 +490,8 @@ def main():
             exit(1)
 
         Add.check(session,
-                    args.url,
                     args.add,
+                    args.url,
                     args.max_down_time,
                     args.check_frequency,
                     args.check_timeout,
