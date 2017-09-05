@@ -1,8 +1,5 @@
-# Format as	md5|url_to_check|warn_after|check_frequency|check_timeout
-# or		string|url_to_check|warn_after|check_frequency|check_timeout
-# or		diff|url_to_check|warn_after|check_frequency|check_timeout
-# you can drop the warn_after, check_frequency and check_timeout to use the
-# defaults
-# if you want to set one you must include all three due how the data is parsed
-diff|https://codex.wordpress.org/WordPress_Versions
-md5|https://github.com/JimACarter/web-check|7200|600|2
+# Format as
+# check_type|url_to_check|warn_after|check_frequency|check_timeout|string
+diff|https://codex.wordpress.org/WordPress_Versions|86400|3600|30
+md5|https://github.com/JimACarter/web-check|86400|3600|30
+string|https://www.google.co.uk|86400|3600|30|you

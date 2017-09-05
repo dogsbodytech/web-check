@@ -1,3 +1,5 @@
 venv/
 *.db
+*.log
 *checks.txt
+__pycache__/
