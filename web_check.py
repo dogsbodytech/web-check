@@ -69,7 +69,9 @@ def get_text(html):
     return h.handle(html)
 
 def strip_numbers(text):
-    return(filter(lambda x: not x.isdigit(), text))
+    # this needs work - the lambda function wasn't working properly, I might just user regex
+    text = text.strip('1')
+    return text
 
 def get_md5(html):
     """
