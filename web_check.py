@@ -4,7 +4,9 @@ try:
     import logging
     import argparse
     import time
+    import signal
     import requests
+    import re
     import html2text
     import hashlib
     import difflib
@@ -44,7 +46,7 @@ class StringChecks(Base, BaseCheck):
     present = Column(Integer)
 
 class DiffChecks(Base, BaseCheck):
-    flags = Column(String)
+    expression = Column(String)
     current_content = Column(String)
 
 checks = (MD5Checks, StringChecks, DiffChecks)
@@ -68,10 +70,32 @@ def get_text(html):
     h.ignore_links = True
     return h.handle(html)
 
-def strip_numbers(text):
-    # this needs work - the lambda function wasn't working properly, I might just user regex
-    text = text.strip('1')
-    return text
+# I wanted to timeout the regex after a certain time, I couldn't see anything
+# in the docs for re, so I googled it, people ended up using signal to declare
+# what seemed like far to complex functions and classes to me so I had a go
+# myself reading the signal docs I didn't get as complicated as this one but it
+# I liked the approach, my function would just set the handler with a blank
+# timeout error, set the alarm and then try catch the timeout error, this looks
+# a bit better written and calling it using with seems nice
+class timeout:
+    def __init__(self, seconds=1, error_message='Timeout'):
+        self.seconds = seconds
+        self.error_message = error_message
+    def handle_timeout(self, signum, frame):
+        raise TimeoutError(self.error_message)
+    def __enter__(self):
+        signal.signal(signal.SIGALRM, self.handle_timeout)
+        signal.alarm(self.seconds)
+    def __exit__(self, type, value, traceback):
+        signal.alarm(0)
+
+def strip_matching(expression, text):
+    with timeout(10, 'Regex timed out'):
+        result = re.sub(expression, '?', text)
+        #prog = re.compile(expression)
+        #result = prog.sub('?', text)
+
+    return result
 
 def get_md5(html):
     """
@@ -144,13 +168,15 @@ class Run:
 
     def _diff(session, check, url_content):
         text = get_text(url_content.text)
-        if session.flags == 'strip-numbers':
-            print(session.url)
-            current_content = strip_numbers(current_content)
+        current_content = check.current_content
+        if check.expression:
+            # I'm compiling the same expression twice but oh well
+            text = strip_matching(check.expression, text)
+            current_content = strip_matching(check.expression, current_content)
 
-        if text != check.current_content:
+        if text != current_content:
             logging.info('Content changed for {}'.format(check.url))
-            for line in difflib.context_diff(check.current_content.split('\n'),
+            for line in difflib.context_diff(current_content.split('\n'),
                             text.split('\n'),
                             fromfile='Old content for {}'.format(check.url),
                             tofile='New content for {}'.format(check.url)):
@@ -351,8 +377,16 @@ class Add:
 
         elif check_type == 'diff':
             current_content = get_text(url_content.text)
-            if string == 'strip-numbers':
-                current_content = strip_numbers(current_content)
+            # We will store the content after it is stripped of html but
+            # before it is stripped by the user's regex
+            # running the user's regex to check it compiles and doesn't timeout
+            if string:
+                try:
+                    strip_matching(string, current_content)
+                except Exception as e:
+                    print('Error: when processing regular expression: {}'
+                                                                    .format(e))
+                    exit(1)
 
             check = DiffChecks(url=url,
                             current_content=get_text(url_content.text),
@@ -362,7 +396,7 @@ class Add:
                             run_after=0,
                             check_frequency=check_frequency,
                             check_timeout=check_timeout,
-                            flags=string)
+                            expression=string)
             session.add(check)
             try:
                 session.commit()
@@ -527,7 +561,7 @@ Arguments:
   -c/--check\t\tRun checks against all monitored urls
   -l/--list\t\tList stored checks from the database
   -a/--add\t\tSpecify a check type to add a check for
-  -s/--string\t\tSpecify a string to be used by a check
+  -s/--string\t\tSpecify a string or expression to be used by a check
   -d/--delete\t\tSpecify a check type to delete a check for
   --max-down-time\tNumber of seconds a site can be down for before warning
   --check-frequency\tNumber of seconds to wait between checks
