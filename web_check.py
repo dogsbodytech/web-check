@@ -140,8 +140,6 @@ class Run:
             check.current_hash = new_md5
             session.commit()
 
-        return ''
-
     def _string(session, check, url_content):
         string_found = check.string_to_match in get_text(url_content.text)
         if string_found != check.present:
@@ -164,8 +162,6 @@ class Run:
 
             session.commit()
 
-        return ''
-
     def _diff(session, check, url_content):
         text = get_text(url_content.text)
         current_content = check.current_content
@@ -183,8 +179,6 @@ class Run:
                 print(line)
             check.current_content = text
             session.commit()
-
-        return ''
 
     # mapping the class to the internal function used to run a check for that
     # class
@@ -235,7 +229,6 @@ class Run:
                 check.alert_after = 0
                 session.commit()
 
-        return ''
 class Add:
     def _validate_input(max_down_time, check_frequency, check_timeout):
         """
@@ -412,8 +405,6 @@ class Add:
             print('Please choose a valid check')
             exit(1)
 
-        return ''
-
     def from_file(session, import_file):
         """
         Add's new database entrys from a file
@@ -445,8 +436,6 @@ class Add:
                 else:
                     print('Check for line {} was added'.format(line_number))
 
-        return ''
-
 def list_checks():
     """
     List all of the checks from the database in a table like format.
@@ -456,7 +445,6 @@ def list_checks():
     print('.tables')
     print('PRAGMA table_info(<table>);')
     print('select * from <table>;')
-    return ''
 
 def delete_check(session, check_type, url):
     if check_type == 'md5':
@@ -475,8 +463,6 @@ def delete_check(session, check_type, url):
     else:
         print('There is no {} check for {}'.format(check_type, url))
         exit(1)
-
-    return ''
 
 def main():
     parser = argparse.ArgumentParser()
