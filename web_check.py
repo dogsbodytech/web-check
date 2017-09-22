@@ -89,11 +89,15 @@ class timeout:
     def __exit__(self, type, value, traceback):
         signal.alarm(0)
 
-def strip_matching(expression, text):
+def compile_regex(expression):
+    with timeout(2, 'Timed out when compiling regex'):
+        compiled_expression = re.compile(expression)
+
+    return compiled_expression
+
+def strip_matching(compiled_expression, text):
     with timeout(10, 'Regex timed out'):
-        result = re.sub(expression, '?', text)
-        #prog = re.compile(expression)
-        #result = prog.sub('?', text)
+        result = compiled_expression.sub('?', text)
 
     return result
 
@@ -163,21 +167,33 @@ class Run:
             session.commit()
 
     def _diff(session, check, url_content):
-        text = get_text(url_content.text)
-        current_content = check.current_content
+        new_markdown = get_text(url_content.text)
+        stored_markdown = get_text(check.current_content)
         if check.expression:
-            # I'm compiling the same expression twice but oh well
-            text = strip_matching(check.expression, text)
-            current_content = strip_matching(check.expression, current_content)
+            try:
+                compiled_expression = compile_regex(check.expression)
+                new_text = strip_matching(compiled_expression, new_markdown)
+                stored_text = strip_matching(compiled_expression,
+                                            stored_markdown)
 
-        if text != current_content:
+            except Exception as e:
+                print('Error: when processing regular expression for {}: {}'
+                                                        .format(check.url, e))
+                return
+
+        else:
+            new_text = new_markdown
+            stored_text = stored_markdown
+
+        if new_text != stored_text:
             logging.info('Content changed for {}'.format(check.url))
-            for line in difflib.context_diff(current_content.split('\n'),
-                            text.split('\n'),
+            for line in difflib.context_diff(stored_text.split('\n'),
+                            new_text.split('\n'),
                             fromfile='Old content for {}'.format(check.url),
                             tofile='New content for {}'.format(check.url)):
                 print(line)
-            check.current_content = text
+
+            check.current_content = url_content.text
             session.commit()
 
     # mapping the class to the internal function used to run a check for that
@@ -360,29 +376,29 @@ class Add:
                 exit(1)
             else:
                 if string_exists:
-                    print('{} is currently present, will alert if this changes'
-                                                            .format(string))
+                    print('{} is currently present on {}, will alert if this'\
+                        'changes'.format(string, url))
                 else:
-                    print('{} is currently not present, will alert if this '\
-                            'changes'.format(string))
+                    print('{} is currently not present on {}, will alert if'\
+                        'this changes'.format(string))
 
                 print('Added String Check for {}'.format(url))
 
         elif check_type == 'diff':
-            current_content = get_text(url_content.text)
-            # We will store the content after it is stripped of html but
-            # before it is stripped by the user's regex
+            current_html = url_content.text
             # running the user's regex to check it compiles and doesn't timeout
             if string:
+                markdown = get_text(current_html)
                 try:
-                    strip_matching(string, current_content)
+                    compiled_expression = compile_regex(string)
+                    strip_matching(compiled_expression, markdown)
                 except Exception as e:
-                    print('Error: when processing regular expression: {}'
-                                                                    .format(e))
+                    print('Error: when processing regular expression for {}: {}'
+                                                                .format(url, e))
                     exit(1)
 
             check = DiffChecks(url=url,
-                            current_content=get_text(url_content.text),
+                            current_content=current_html,
                             alert_after=0,
                             alerted=0,
                             max_down_time=max_down_time,
