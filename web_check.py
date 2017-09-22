@@ -423,7 +423,10 @@ class Add:
 
     def from_file(session, import_file):
         """
-        Add's new database entrys from a file
+        Add's new database entrys from a file, validation needs to be performed
+        inside the add check section since this just pass the arguments through
+        without validation - this should mean less code needs to be edited when
+        adding new check types
         """
         def get_kwargs(*args):
             for arg in args:
@@ -457,6 +460,8 @@ def list_checks():
     List all of the checks from the database in a table like format.
     """
     # I am removing the old list checks since it is horid
+    # This would now be more useful since the user will see the html stored for
+    # a diff check rather than the text being compared
     print('use sqlite3 to view the tables')
     print('.tables')
     print('PRAGMA table_info(<table>);')
