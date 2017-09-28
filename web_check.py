@@ -49,7 +49,11 @@ class DiffChecks(Base, BaseCheck):
     expression = Column(String)
     current_content = Column(String)
 
-checks = (MD5Checks, StringChecks, DiffChecks)
+class RegexChecks(Base, BaseCheck):
+    expression = Column(String)
+    matched_groups = Column(String)
+
+checks = (MD5Checks, StringChecks, DiffChecks, RegexChecks)
 default_max_down_time = 86400
 default_check_frequency = 3600
 default_check_timeout = 30
@@ -90,8 +94,22 @@ class timeout:
         signal.alarm(0)
 
 def compile_regex(expression):
+    """
+    I don't think this is really required due to default caching and our low
+    level of re-use but it seems unlikely to cost significantly more and may be
+    saving resources
+    """
     with timeout(2, 'Timed out when compiling regex'):
         compiled_expression = re.compile(expression)
+
+    return compiled_expression
+
+def compile_multiline_regex(expression):
+    """
+    Where a multi-line regex is one in which dot matches new lines
+    """
+    with timeout(2, 'Timed out when compiling regex'):
+        compiled_expression = re.compile(expression, re.S)
 
     return compiled_expression
 
@@ -100,6 +118,26 @@ def strip_matching(compiled_expression, text):
         result = compiled_expression.sub('?', text)
 
     return result
+
+def find_matching_capture_groups(compiled_expression, text):
+    """
+    Input regular expression, text.  Returns group 0 - all matched capture
+    groups
+
+    I reccomend calling with just one capture group because using a complex
+    regex is more likely to cause issues, defaults to timing out after 10 secs
+    """
+    with timeout(10, 'Regex timed out'):
+        match = compiled_expression.findall(text)
+
+    try:
+        matched_groups = match.groups(0)
+    except AttributeError:
+        raise AttributeError('No matches for given capture group(s)')
+
+    return matched_groups
+
+
 
 def get_md5(html):
     """
@@ -196,12 +234,33 @@ class Run:
             check.current_content = url_content.text
             session.commit()
 
+    def _regex(session, check, url_content):
+        try:
+            compiled_expression = compile_multiline_regex(session.expression)
+            matched_groups = str(find_matching_capture_groups(compiled_expression,
+                                                            url_content.text))
+        except Exception as e:
+            print('Error: when processing regular expression for {}: {}'.format(
+                                                                        url, e))
+            # Fine not to edit failed since since that is for network issues
+            # and this message will be sent everytime
+            return
+
+        if matched_groups != check.matched_groups:
+            logging.info('Matched groups changed for {}\nNEW:\n{}\nOLD:\n{}'
+                    .format(check.url, matched_groups, check.matched_groups))
+            print('Matched groups changed for {}\nNEW:\n{}\nOLD:\n{}'
+                    .format(check.url, matched_groups, check.matched_groups))
+            check.matched_groups = matched_groups
+            session.commit()
+
     # mapping the class to the internal function used to run a check for that
     # class
     function = {
                 MD5Checks: _md5,
                 StringChecks: _string,
-                DiffChecks: _diff
+                DiffChecks: _diff,
+                RegexChecks: _regex
                 }
 
     def all_checks(session, checks):
@@ -417,6 +476,45 @@ class Add:
             else:
                 print('Added Diff Check for {}'.format(url))
 
+        elif check_type == 'regex':
+            if string:
+                try:
+                    compiled_expression = compile_multiline_regex(string)
+                    matched_groups = str(find_matching_capture_groups(
+                                        compiled_expression, url_content.text))
+                except Exception as e:
+                    print('Error: when processing regular expression for {}: {}'
+                                                                .format(url, e))
+                    raise
+                    exit(1)
+
+            else:
+                print('Please specify a regular expression who\'s capture'\
+                    'group you would like to monitor' )
+                exit(1)
+
+            check = RegexChecks(url=url,
+                            matched_groups=matched_groups,
+                            alert_after=0,
+                            alerted=0,
+                            max_down_time=max_down_time,
+                            run_after=0,
+                            check_frequency=check_frequency,
+                            check_timeout=check_timeout,
+                            expression=string)
+            session.add(check)
+            try:
+                session.commit()
+            except sqlalchemy.exc.IntegrityError:
+                session.rollback()
+                print('Error: An entry for {} is already in database'.format(
+                                                                        url))
+                exit(1)
+            else:
+                print('Added Regex Check for {} with capture group(s) of {}'
+                    .format(url, matched_groups))
+
+
         else:
             print('Please choose a valid check')
             exit(1)
@@ -474,6 +572,8 @@ def delete_check(session, check_type, url):
         check = session.query(StringChecks).filter(StringChecks.url == url)
     elif check_type == 'diff':
         check = session.query(DiffChecks).filter(DiffChecks.url == url)
+    elif check_type == 'regex':
+        check = session.query(RegexChecks).filter(RegexChecks.url == url)
     else:
         print('Chose either md5, string or diff check')
         exit(1)
