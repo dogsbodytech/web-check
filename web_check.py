@@ -34,6 +34,7 @@ class BaseCheck(object):
     run_after = Column(Integer)
     alert_after = Column(Integer)
     alerted = Column(Integer)
+    process = Column(String)
 
 class MD5Checks(Base, BaseCheck):
     current_hash = Column(String)
@@ -242,6 +243,7 @@ class Add:
             max_down_time,
             check_frequency,
             check_timeout,
+            process,
             string=None):
         max_down_time, check_frequency, check_timeout = Add._validate_input(
                                                         max_down_time,
@@ -290,7 +292,8 @@ class Add:
                         max_down_time=max_down_time,
                         run_after=0,
                         check_frequency=check_frequency,
-                        check_timeout=check_timeout)
+                        check_timeout=check_timeout,
+                        process=process)
             session.add(check)
             try:
                 session.commit()
@@ -318,7 +321,8 @@ class Add:
                             max_down_time=max_down_time,
                             run_after= 0,
                             check_frequency=check_frequency,
-                            check_timeout=check_timeout)
+                            check_timeout=check_timeout,
+                            process=process)
             session.add(check)
             try:
                 session.commit()
@@ -345,7 +349,8 @@ class Add:
                             max_down_time=max_down_time,
                             run_after=0,
                             check_frequency=check_frequency,
-                            check_timeout=check_timeout)
+                            check_timeout=check_timeout,
+                            process=process)
             session.add(check)
             try:
                 session.commit()
@@ -458,6 +463,9 @@ def main():
     parser.add_argument('--log-location',
         default=default_log_location,
         help='Specify a log file name and location')
+    parser.add_argument('-p', '--process',
+        help='Specify the process message to be sent to users')
+
     parser.allow_abbrev = False
     args = parser.parse_args()
     logging.basicConfig(filename=default_log_location, level=logging.WARNING,
@@ -493,7 +501,8 @@ def main():
                     args.max_down_time,
                     args.check_frequency,
                     args.check_timeout,
-                    args.string)
+                    args.string,
+                    args.process)
     elif args.delete:
         if not args.url:
             print('A please define a url to delete the check for')
@@ -511,6 +520,7 @@ Arguments:
   -l/--list\t\tList stored checks from the database
   -a/--add\t\tSpecify a check type to add a check for
   -s/--string\t\tSpecify a string to be used by a check
+  -p/--process\t\tSpecify the process message to be sent to users
   -d/--delete\t\tSpecify a check type to delete a check for
   --max-down-time\tNumber of seconds a site can be down for before warning
   --check-frequency\tNumber of seconds to wait between checks

@@ -1,5 +1,5 @@
 # Format as
-# check_type|url_to_check|warn_after|check_frequency|check_timeout|string
-diff|https://codex.wordpress.org/WordPress_Versions|86400|3600|30
-md5|https://github.com/JimACarter/web-check|86400|3600|30
-string|https://www.google.co.uk|86400|3600|30|you
+# check_type|url_to_check|warn_after|check_frequency|check_timeout|string|process
+diff|https://codex.wordpress.org/WordPress_Versions|86400|3600|30|update wordpress sites
+md5|https://github.com/JimACarter/web-check|86400|3600|30|pull down new version of web check
+string|https://www.google.co.uk|86400|3600|30|it looks like google are no longer linking to youtube?|you|
