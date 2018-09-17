@@ -382,7 +382,7 @@ class Add:
                 #line = line.split('#', 1)[0].rstrip()
                 # Swap over to comments needing to start with a #
                 # to avoid breaking when urls contain a #
-                if not line or line.starts_with('#'):
+                if not line or line.startswith('#'):
                     continue
 
                 try:
