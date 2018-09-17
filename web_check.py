@@ -53,25 +53,29 @@ default_check_timeout = 30
 default_log_location = 'web_check.log'
 default_database_location = 'web_check.db'
 
-def get_text(html):
+def get_text(response_object):
     """
-    Input html bytes.  Returns utf-8 markdown without links
+    Input requests object.  Returns utf-8 markdown without links
 
-    requests.get().text will be used as the input data
+    requests.get() will be used as the input data
+    if the response is already text it is simply returned, otherwise
     html2text will be used to remove most of the changing parts of the response
     links will be ignored since most large sites have dynamic links
     if you want to closely monitor a basic site it is probably better to hash
     requests.get().content and not bother stripping the html
     """
+    if 'text/plain' in response_object.headers.get('content-type'):
+        return response_object.text
+
     h = html2text.HTML2Text()
     h.ignore_links = True
-    return h.handle(html)
+    return h.handle(response_object.text)
 
-def get_md5(html):
+def get_md5(response_object):
     """
     Input html bytes. Returns MD5 hash.
     """
-    return hashlib.md5(get_text(html).encode('utf-8')).hexdigest()
+    return hashlib.md5(get_text(response_object).encode('utf-8')).hexdigest()
 
 def check_failed(session, checks):
     error_message = 'Error: {} failed connection to {}\n\
@@ -97,7 +101,7 @@ comes back up.'
 
 class Run:
     def _md5(session, check, url_content):
-        new_md5 = get_md5(url_content.text)
+        new_md5 = get_md5(url_content)
         if new_md5 != check.current_hash:
             if new_md5 == check.old_hash:
                 logging.info('MD5 reverted for {}'.format(check.url))
@@ -110,10 +114,8 @@ class Run:
             check.current_hash = new_md5
             session.commit()
 
-        return ''
-
     def _string(session, check, url_content):
-        string_found = check.string_to_match in get_text(url_content.text)
+        string_found = check.string_to_match in get_text(url_content)
         if string_found != check.present:
             if check.present:
                 logging.info('{} is no longer present on {}'.format(
@@ -134,10 +136,10 @@ class Run:
 
             session.commit()
 
-        return ''
-
     def _diff(session, check, url_content):
-        text = get_text(url_content.text)
+        if not 'text/plain' in url_content.headers.get('content-type'):
+            text = get_text(url_content)
+
         if text != check.current_content:
             logging.info('Content changed for {}'.format(check.url))
             for line in difflib.context_diff(check.current_content.split('\n'),
@@ -147,8 +149,6 @@ class Run:
                 print(line)
             check.current_content = text
             session.commit()
-
-        return ''
 
     # mapping the class to the internal function used to run a check for that
     # class
@@ -284,7 +284,7 @@ class Add:
             exit(1)
 
         if check_type == 'md5':
-            current_hash = get_md5(url_content.text)
+            current_hash = get_md5(url_content)
             check = MD5Checks(url=url,
                         current_hash=current_hash,
                         alert_after=0,
@@ -309,7 +309,7 @@ class Add:
                 print('A string is required')
                 exit(1)
             string_exists = 0
-            if string in get_text(url_content.text):
+            if string in get_text(url_content):
                 string_exists = 1
 
             check = StringChecks(url=url,
@@ -341,7 +341,7 @@ class Add:
 
         elif check_type == 'diff':
             check = DiffChecks(url=url,
-                            current_content=get_text(url_content.text),
+                            current_content=get_text(url_content),
                             alert_after=0,
                             alerted=0,
                             max_down_time=max_down_time,
