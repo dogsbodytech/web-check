@@ -137,9 +137,7 @@ class Run:
             session.commit()
 
     def _diff(session, check, url_content):
-        if not 'text/plain' in url_content.headers.get('content-type'):
-            text = get_text(url_content)
-
+        text = get_text(url_content)
         if text != check.current_content:
             logging.info('Content changed for {}'.format(check.url))
             for line in difflib.context_diff(check.current_content.split('\n'),
