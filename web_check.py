@@ -378,8 +378,11 @@ class Add:
             return args
         with open(import_file, 'r') as f:
             for line_number, line in enumerate(f, 1):
-                # ignore everything after a #
-                line = line.split('#', 1)[0].rstrip()
+                ## ignore everything after a #
+                #line = line.split('#', 1)[0].rstrip()
+                # Swap over to comments needing to start with a #
+                # to avoid breaking when urls contain a #
+                if line.starts_with('#')
                 if not line:
                     continue
 
