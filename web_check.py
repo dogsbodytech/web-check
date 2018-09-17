@@ -104,6 +104,7 @@ class Run:
     def _md5(session, check, url_content):
         new_md5 = get_md5(url_content)
         if new_md5 != check.current_hash:
+            print(check.process)
             if new_md5 == check.old_hash:
                 logging.info('MD5 reverted for {}'.format(check.url))
                 print('The md5 for {} has been reverted'.format(check.url))
@@ -118,6 +119,7 @@ class Run:
     def _string(session, check, url_content):
         string_found = check.string_to_match in get_text(url_content)
         if string_found != check.present:
+            print(check.process)
             if check.present:
                 logging.info('{} is no longer present on {}'.format(
                                                         check.string_to_match,
@@ -140,6 +142,7 @@ class Run:
     def _diff(session, check, url_content):
         text = get_text(url_content)
         if text != check.current_content:
+            print(check.process)
             logging.info('Content changed for {}'.format(check.url))
             for line in difflib.context_diff(check.current_content.split('\n'),
                             text.split('\n'),
