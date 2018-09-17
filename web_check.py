@@ -299,7 +299,7 @@ class Add:
                 session.commit()
             except sqlalchemy.exc.IntegrityError:
                 session.rollback()
-                print('Error: An entry for {} is already in database'.format(
+                print('Warning: An entry for {} is already in database'.format(
                                                                         url))
                 exit(1)
             else:
@@ -328,7 +328,7 @@ class Add:
                 session.commit()
             except sqlalchemy.exc.IntegrityError:
                 session.rollback()
-                print('Error: An entry for {} is already in database'.format(
+                print('Warning: An entry for {} is already in database'.format(
                                                                         url))
                 exit(1)
             else:
@@ -356,7 +356,7 @@ class Add:
                 session.commit()
             except sqlalchemy.exc.IntegrityError:
                 session.rollback()
-                print('Error: An entry for {} is already in database'.format(
+                print('Warning: An entry for {} is already in database'.format(
                                                                         url))
                 exit(1)
             else:
@@ -389,18 +389,18 @@ class Add:
                 try:
                     Add.check(session, *line.split('|'))
                 except TypeError:
-                    logging.warning('Warning: line {} was skipped, it is not '
+                    logging.error('Warning: line {} was skipped, it is not '
                         'in an accepted format'.format(line_number))
-                    print('Warning: line {} was skipped, it is not in an '\
+                    print('Error: line {} was skipped, it is not in an '\
                         'accepted format'.format(line_number))
                     raise
                 except:
-                    logging.error('Error: line {} was skipped due to an error'
+                    logging.warning('Error: line {} was skipped due to an error'
                                                     .format(line_number))
-                    print('Error: line {} was skipped due to an error'
+                    print('Warning: line {} was skipped due to an error'
                                                     .format(line_number))
                 else:
-                    print('Check for line {} was added'.format(line_number))
+                    print('Info: Check for line {} was added'.format(line_number))
 
         return ''
 
