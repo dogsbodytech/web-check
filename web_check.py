@@ -517,23 +517,6 @@ def main():
     elif args.import_file:
         Add.from_file(session, args.import_file)
     else:
-        print("""\
-Arguments:
-  url\t\t\tWhen adding or removing checks specify the url
-  -h/--help\t\tShow the help message and exit
-  -c/--check\t\tRun checks against all monitored urls
-  -l/--list\t\tList stored checks from the database
-  -a/--add\t\tSpecify a check type to add a check for
-  -s/--string\t\tSpecify a string to be used by a check
-  -p/--process\t\tSpecify the process message to be sent to users
-  -d/--delete\t\tSpecify a check type to delete a check for
-  --max-down-time\tNumber of seconds a site can be down for before warning
-  --check-frequency\tNumber of seconds to wait between checks
-  --check-timeout\tNumber of seconds to timeout get requests after
-  --database-location\tSpecify a database name and location
-  --import-file\t\tSpecify a file to populate the database from
-  --log-location\tSpecify a log file name and location\
-  """)
-
+        print('No action taken run `{} -h` for more info'.format(__file__))
 if __name__ == '__main__':
     main()
