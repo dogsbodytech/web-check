@@ -338,7 +338,7 @@ class Add:
                     print('Info: {} is currently present, will alert if this changes'
                                                             .format(string))
                 else:
-                    print('{} is currently not present, will alert if this '\
+                    print('Info: {} is currently not present, will alert if this '\
                             'changes'.format(string))
 
                 print('Added String Check for {}'.format(url))
