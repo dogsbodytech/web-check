@@ -381,7 +381,7 @@ class Add:
                 if not line or line.startswith('#'):
                     continue
 
-                line.rstrip()
+                line = line.rstrip()
                 try:
                     Add.check(session, *line.split('|'))
                 except TypeError:
