@@ -201,7 +201,6 @@ class Run:
                 check.alert_after = 0
                 session.commit()
 
-        return ''
 class Add:
     def _validate_input(max_down_time, check_frequency, check_timeout):
         """
@@ -310,7 +309,7 @@ class Add:
 
         elif check_type == 'string':
             if not string:
-                print('A string is required')
+                print('Error: A string is required')
                 exit(1)
             string_exists = 0
             if string in get_text(url_content):
@@ -336,7 +335,7 @@ class Add:
                 exit(1)
             else:
                 if string_exists:
-                    print('{} is currently present, will alert if this changes'
+                    print('Info: {} is currently present, will alert if this changes'
                                                             .format(string))
                 else:
                     print('{} is currently not present, will alert if this '\
@@ -369,16 +368,10 @@ class Add:
             print('Please choose a valid check')
             exit(1)
 
-        return ''
-
     def from_file(session, import_file):
         """
         Add's new database entrys from a file
         """
-        def get_kwargs(*args):
-            for arg in args:
-                print(arg)
-            return args
         with open(import_file, 'r') as f:
             for line_number, line in enumerate(f, 1):
                 ## ignore everything after a #
@@ -388,6 +381,7 @@ class Add:
                 if not line or line.startswith('#'):
                     continue
 
+                line.rstrip()
                 try:
                     Add.check(session, *line.split('|'))
                 except TypeError:
@@ -404,18 +398,16 @@ class Add:
                 else:
                     print('Info: Check for line {} was added'.format(line_number))
 
-        return ''
-
 def list_checks():
     """
     List all of the checks from the database in a table like format.
     """
     # I am removing the old list checks since it is horid
     print('use sqlite3 to view the tables')
-    print('.tables')
-    print('PRAGMA table_info(<table>);')
-    print('select * from <table>;')
-    return ''
+    print('show the tables with `.tables`')
+    print('show schema for table `PRAGMA table_info(md5checks);`')
+    print('show urls in table `select url from md5checks;`')
+    print('show everything in table `select * from md5checks;`')
 
 def delete_check(session, check_type, url):
     if check_type == 'md5':
@@ -434,8 +426,6 @@ def delete_check(session, check_type, url):
     else:
         print('There is no {} check for {}'.format(check_type, url))
         exit(1)
-
-    return ''
 
 def main():
     parser = argparse.ArgumentParser()
