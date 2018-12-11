@@ -160,10 +160,13 @@ class Run:
                 DiffChecks: _diff
                 }
 
-    def all_checks(session, checks):
+    def all_checks(session, checks, force):
         for check_type in checks:
-            for check in session.query(check_type).filter(check_type.run_after <
-                        time.time()).order_by(check_type.id):
+            checks_to_check = session.query(check_type)
+            if not force:
+                checks_to_check = checks_to_check.filter(
+                        check_type.run_after < time.time())
+            for check in checks_to_check.order_by(check_type.id):
                 now = time.time()
                 check.run_after = now + check.check_frequency
                 check.alert_after = now + check.max_down_time
@@ -435,7 +438,7 @@ def main():
     parser.add_argument('-c', '--check', action='store_true',
         help='Run checks against all monitored urls')
     parser.add_argument('-l', '--list', action='store_true',
-        help='Maximum number of set string that can occur')
+        help='List checks')
     parser.add_argument('-d', '--delete',
         help='The check type to be deleted')
     parser.add_argument('-a', '--add',
@@ -461,6 +464,8 @@ def main():
         help='Specify a log file name and location')
     parser.add_argument('-p', '--process',
         help='Specify the process message to be sent to users')
+    parser.add_argument('-f', '--force', action='store_true',
+        help='Use with argument --check.  Force all checks to be checked regardless of scheduled next check time.')
 
     parser.allow_abbrev = False
     args = parser.parse_args()
@@ -479,7 +484,7 @@ def main():
     Session = sessionmaker(bind=engine)
     session = Session()
     if args.check:
-        Run.all_checks(session, checks)
+        Run.all_checks(session, checks, args.force)
         errors = check_failed(session, checks)
         if errors:
             exit(1)
