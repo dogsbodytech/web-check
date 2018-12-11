@@ -170,7 +170,8 @@ class Run:
                 session.commit()
                 try:
                     url_content = requests.get(check.url,
-                                        timeout=check.check_timeout)
+                                        timeout=check.check_timeout,
+                                        headers = {'User-Agent': 'web-check'})
                 except requests.exceptions.ConnectionError:
                     logging.info('Connection Error: when connecting to {}'
                                                             .format(check.url))
@@ -252,7 +253,7 @@ class Add:
                                                         check_frequency,
                                                         check_timeout)
         try:
-            url_content = requests.get(url, timeout=check_timeout)
+            url_content = requests.get(url, timeout=check_timeout, headers = {'User-Agent': 'web-check'})
         except requests.exceptions.ConnectionError:
             logging.error('Connection Error: failed to add {} check for {}'
                                                 .format(check_type, url))
