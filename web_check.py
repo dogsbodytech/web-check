@@ -169,7 +169,9 @@ class Run:
             for check in checks_to_check.order_by(check_type.id):
                 now = time.time()
                 check.run_after = now + check.check_frequency
-                check.alert_after = now + check.max_down_time
+                if check.alerted = 0:
+                    check.alert_after = now + check.max_down_time
+
                 session.commit()
                 try:
                     url_content = requests.get(check.url,
