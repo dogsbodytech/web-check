@@ -169,7 +169,9 @@ class Run:
             for check in checks_to_check.order_by(check_type.id):
                 now = time.time()
                 check.run_after = now + check.check_frequency
-                if check.alerted = 0:
+                # Only update the alert after time if the previous
+                # check succeeded
+                if not check.alert_after:
                     check.alert_after = now + check.max_down_time
 
                 session.commit()
